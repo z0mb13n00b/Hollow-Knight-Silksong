@@ -23,6 +23,66 @@
     <script src="jszip.js"></script>
 
 <script>
+/* ================= WebGL BUFFER FIX ================= */
+/* 
+   This polyfill splits WebGL bufferSubData calls larger than 512MB
+   into smaller chunks to avoid the 2GB WebGL limit error.
+   Prevents: "ArrayBuffer larger than 2GB" TypeError
+*/
+(function() {
+  const MAX_BUFFER_SIZE = 512 * 1024 * 1024; // 512MB chunks
+  
+  // Patch WebGL2RenderingContext
+  if (window.WebGL2RenderingContext) {
+    const proto = WebGL2RenderingContext.prototype;
+    const original = proto.bufferSubData;
+    
+    proto.bufferSubData = function(target, offset, srcData) {
+      if (srcData && srcData.byteLength > MAX_BUFFER_SIZE) {
+        console.warn(
+          `[WebGL] Large buffer detected (${(srcData.byteLength / 1024 / 1024).toFixed(2)}MB). ` +
+          `Splitting into ${Math.ceil(srcData.byteLength / MAX_BUFFER_SIZE)} chunks...`
+        );
+        
+        let pos = 0;
+        while (pos < srcData.byteLength) {
+          const chunkSize = Math.min(MAX_BUFFER_SIZE, srcData.byteLength - pos);
+          const chunk = srcData.slice(pos, pos + chunkSize);
+          original.call(this, target, offset + pos, chunk);
+          pos += chunkSize;
+        }
+        return;
+      }
+      return original.call(this, target, offset, srcData);
+    };
+  }
+  
+  // Patch WebGLRenderingContext as fallback
+  if (window.WebGLRenderingContext) {
+    const proto = WebGLRenderingContext.prototype;
+    const original = proto.bufferSubData;
+    
+    proto.bufferSubData = function(target, offset, srcData) {
+      if (srcData && srcData.byteLength > MAX_BUFFER_SIZE) {
+        console.warn(
+          `[WebGL] Large buffer detected (${(srcData.byteLength / 1024 / 1024).toFixed(2)}MB). ` +
+          `Splitting into ${Math.ceil(srcData.byteLength / MAX_BUFFER_SIZE)} chunks...`
+        );
+        
+        let pos = 0;
+        while (pos < srcData.byteLength) {
+          const chunkSize = Math.min(MAX_BUFFER_SIZE, srcData.byteLength - pos);
+          const chunk = srcData.slice(pos, pos + chunkSize);
+          original.call(this, target, offset + pos, chunk);
+          pos += chunkSize;
+        }
+        return;
+      }
+      return original.call(this, target, offset, srcData);
+    };
+  }
+})();
+
 const loadingText = document.querySelector("#loading-text");
 const CACHE_NAME = "hksilksongcache-v2"; // bump version if needed
 
@@ -128,7 +188,7 @@ async function fetchWithProgress(url) {
     chunks.push(value);
 
     let mbDone = (loadedBytes / (1024 * 1024)).toFixed(2);
-    let mbTotal = '1986.64';
+    let mbTotal = '2260.00';
 
     loadingText.textContent =
       `DOWNLOADING ASSETS... (${mbDone} MB / ${mbTotal} MB)`;
